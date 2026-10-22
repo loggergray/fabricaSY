@@ -1,0 +1,15 @@
+{
+  "nome": "Criar ferramenta",
+  "icone": "✨",
+  "descricao": "Cria uma ferramenta nova a partir do molde, ou registra o código que a IA escreveu.",
+  "versao": "1.0.0",
+  "tags": ["fábrica"],
+  "entradas": [
+    { "nome": "id", "rotulo": "Identificador", "tipo": "texto", "obrigatorio": true, "ajuda": "Minúsculas, números e hífen. Ex.: renomear-lote" },
+    { "nome": "nome", "rotulo": "Nome", "tipo": "texto", "obrigatorio": true },
+    { "nome": "icone", "rotulo": "Ícone (emoji)", "tipo": "texto", "padrao": "🔧" },
+    { "nome": "descricao", "rotulo": "Descrição curta", "tipo": "texto" },
+    { "nome": "manifest_json", "rotulo": "manifest.json da IA (opcional)", "tipo": "areatexto" },
+    { "nome": "codigo", "rotulo": "index.js da IA (opcional)", "tipo": "areatexto", "ajuda": "Se vazio, usa o molde." }
+  ]
+}

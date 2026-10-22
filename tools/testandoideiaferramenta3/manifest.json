@@ -1,0 +1,13 @@
+{
+  "nome": "Auditor de Acessibilidade Mobile",
+  "icone": "♿",
+  "descricao": "Analisa um HTML e aponta problemas de acessibilidade e usabilidade no celular, com sugestão de correção.",
+  "versao": "1.0.0",
+  "tags": ["html", "acessibilidade", "mobile"],
+  "entradas": [
+    { "nome": "origem", "rotulo": "Arquivo HTML", "tipo": "caminho", "ajuda": "Ex.: ~/storage/shared/site/index.html" },
+    { "nome": "html_colado", "rotulo": "…ou cole o HTML aqui", "tipo": "areatexto", "ajuda": "Usado quando o caminho está vazio." },
+    { "nome": "alvo_toque", "rotulo": "Tamanho mínimo de toque (px)", "tipo": "numero", "padrao": 44, "ajuda": "Só vale para tamanhos escritos inline (style=\"...\")." },
+    { "nome": "salvar_em", "rotulo": "Salvar relatório em (opcional)", "tipo": "caminho", "ajuda": "Ex.: ~/relatorio-acessibilidade.md" }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "nome": "__NOME__",
+  "icone": "__ICONE__",
+  "descricao": "__DESCRICAO__",
+  "versao": "0.1.0",
+  "tags": [],
+  "entradas": [
+    { "nome": "entrada", "rotulo": "Entrada", "tipo": "texto", "obrigatorio": true, "ajuda": "O que esta ferramenta recebe." }
+  ]
+}

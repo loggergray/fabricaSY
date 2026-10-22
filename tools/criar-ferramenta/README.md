@@ -1,0 +1,1 @@
+Gera a pasta em `tools/<id>` e a ferramenta aparece na lista em ~2 segundos. Se colar o `manifest.json` e o `index.js` que a IA escreveu, eles são usados no lugar do molde. O prompt pronto está em **Padrão**.

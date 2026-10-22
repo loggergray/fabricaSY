@@ -1,0 +1,15 @@
+# Auditoria de acessibilidade mobile
+
+**Nota:** 97/100 · **Erros:** 0 · **Avisos:** 1
+
+## Avisos (1)
+
+### Sem título principal ×1
+
+**Como corrigir:** Inclua um <h1> descrevendo a página.
+
+- Sem título principal (h1)
+
+---
+
+> **Limites:** a análise é automática e cobre o HTML e os estilos escritos inline. Tamanhos e cores definidos em CSS externo ou em `<style>` não são medidos. Teste também com o TalkBack ligado e com zoom de 200%.

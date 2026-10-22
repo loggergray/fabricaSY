@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: synna
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: npm install --omit=dev
+    startCommand: node server.js
+    healthCheckPath: /saude
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: FABRICA_MODE
+        value: cloud
+      - key: DADOS_DIR
+        value: dados
+      - key: DADOS_PERSISTENTE
+        value: "false"
+      - key: AGUARDAR_MAX_S
+        value: "55"
+      - key: SYNAPSE_TOKEN
+        sync: false
+      - key: MONGODB_URI
+        sync: false
