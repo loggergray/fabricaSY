@@ -1,0 +1,1 @@
+Instalador de telemetria do projeto — grava backup e mede agente, caminhos, bytes e linhas; nunca armazena conteúdo nem termos pesquisados. A coleta começa somente quando o processo Synapse carregar a nova versão. Não mede tokens, contexto interno do modelo ou RAM.

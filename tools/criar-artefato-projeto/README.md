@@ -1,0 +1,1 @@
+Cria um arquivo de script ou fonte de servidor dentro de `artefatos/`, usando `ctx.escrever` e respeitando a simulação. Não sobrescreve artefatos existentes, não executa o código e não abre portas. Para criar uma ferramenta MCP que entre na lista ao vivo, use `criar-ferramenta`.

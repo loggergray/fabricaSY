@@ -1,0 +1,1 @@
+# Dashboard de contexto do projeto — escolha um período e, se quiser, um agente. Veja leituras, buscas, arquivos e recomendações. A ferramenta só observa: não grava o conteúdo dos arquivos nem aplica mudanças. Não mede tokens, janela interna do modelo ou RAM.

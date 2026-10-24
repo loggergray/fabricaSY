@@ -1,0 +1,13 @@
+{
+  "nome": "Criar script ou servidor (fonte)",
+  "icone": "🧱",
+  "descricao": "Gera arquivos de script ou servidor no workspace do projeto, primeiro em simulação e sem iniciar processos.",
+  "versao": "1.0.0",
+  "tags": ["projeto", "scripts", "servidores"],
+  "entradas": [
+    {"nome":"id","rotulo":"Identificador","tipo":"texto","obrigatorio":true,"ajuda":"Minúsculas, números e hífen."},
+    {"nome":"tipo","rotulo":"Tipo","tipo":"opcoes","obrigatorio":true,"opcoes":[{"valor":"script","rotulo":"Script Node.js"},{"valor":"servidor","rotulo":"Fonte de servidor Node.js"}]},
+    {"nome":"codigo","rotulo":"Código-fonte","tipo":"areatexto","obrigatorio":true},
+    {"nome":"confirmar","rotulo":"Confirmar gravação real","tipo":"booleano","padrao":false,"ajuda":"Só marque após revisar a simulação."}
+  ]
+}

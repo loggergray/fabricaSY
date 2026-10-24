@@ -1,0 +1,17 @@
+{
+  "nome": "Modularizador de HTML",
+  "icone": "🧬",
+  "descricao": "Quebra um HTML em seções, componentes e átomos, com CSS e JS no dono certo.",
+  "versao": "1.0.0",
+  "tags": ["html", "css", "js", "refatoração"],
+  "entradas": [
+    { "nome": "origem", "rotulo": "Arquivo HTML", "tipo": "caminho", "ajuda": "Ex.: ~/storage/shared/site/index.html" },
+    { "nome": "html_colado", "rotulo": "…ou cole o HTML aqui", "tipo": "areatexto", "ajuda": "Usado quando o caminho está vazio." },
+    { "nome": "destino", "rotulo": "Pasta de saída", "tipo": "caminho", "obrigatorio": true, "padrao": "~/projetos/modular" },
+    { "nome": "saida", "rotulo": "Formato de saída", "tipo": "opcoes", "padrao": "js",
+      "opcoes": [ { "valor": "js", "rotulo": "Módulos JS (ES modules)" }, { "valor": "html", "rotulo": "HTML concatenado (includes + build)" } ] },
+    { "nome": "nivel", "rotulo": "Profundidade", "tipo": "opcoes", "padrao": "atomos",
+      "opcoes": [ { "valor": "atomos", "rotulo": "Molecular (seções, componentes e átomos)" }, { "valor": "componentes", "rotulo": "Até componentes" }, { "valor": "secoes", "rotulo": "Só seções" } ] },
+    { "nome": "repetidos", "rotulo": "Unificar repetidos em componentes com props", "tipo": "booleano", "padrao": true }
+  ]
+}

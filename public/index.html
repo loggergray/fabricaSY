@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#faf9f5">
+<title>Fábrica de Ferramentas</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="topo">
+  <a href="#/" class="marca">✻ Fábrica</a>
+  <nav><a href="#/">Ferramentas</a> <a href="#/atividade">Atividade</a> <a href="#/projeto">Projeto</a> <a href="#/padrao">Padrão</a></nav>
+  <button id="tokenButton" class="token-btn" type="button">Configurar token</button>
+  <span id="vivo" class="vivo" title="conexão ao vivo"></span>
+</header>
+<main id="app"></main>
+<dialog id="tokenDialog" class="token-dialog">
+  <form id="tokenForm">
+    <h2>Autenticar painel</h2>
+    <p id="tokenMessage">Cole o token configurado no servidor. Ele será guardado somente neste navegador.</p>
+    <label for="tokenInput">SYNAPSE_TOKEN</label>
+    <input id="tokenInput" type="password" autocomplete="new-password" autocapitalize="off" spellcheck="false">
+    <div class="token-actions">
+      <button id="tokenClear" type="button">Remover</button>
+      <span></span>
+      <button id="tokenCancel" type="button">Cancelar</button>
+      <button class="prim" type="submit">Salvar</button>
+    </div>
+  </form>
+</dialog>
+<div id="aviso" class="aviso" hidden></div>
+<script type="module" src="/app.js"></script>
+</body>
+</html>

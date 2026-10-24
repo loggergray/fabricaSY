@@ -1,0 +1,19 @@
+{
+  "name": "fabrica",
+  "version": "1.1.0",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "check": "node --check server.js",
+    "test": "node core/agentes.teste.mjs"
+  },
+  "dependencies": {
+    "acorn": "^8.12.1",
+    "mongodb": "^6.21.0",
+    "parse5": "^7.1.2"
+  }
+}
