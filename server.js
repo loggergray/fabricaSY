@@ -1,7 +1,7 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
-import { createHash } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { fork } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { Loader } from './core/loader.js';
@@ -304,13 +304,30 @@ function origemPermitida(req) {
   return configuradas.includes('*') || configuradas.includes(origin);
 }
 
+const falhasAuth = new Map();
+const JANELA_FALHAS_MS = 10 * 60 * 1000;
+const MAX_FALHAS_AUTH = 30;
+function ipDe(req) {
+  return String(req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '?').split(',')[0].trim();
+}
+function registrarFalhaAuth(req) {
+  const ip = ipDe(req), agora = Date.now(), f = falhasAuth.get(ip);
+  if (!f || agora - f.inicio > JANELA_FALHAS_MS) falhasAuth.set(ip, { n: 1, inicio: agora });
+  else f.n++;
+  if (falhasAuth.size > 5000) falhasAuth.clear();
+}
+function excedeuFalhasAuth(req) {
+  const f = falhasAuth.get(ipDe(req));
+  return !!f && f.n > MAX_FALHAS_AUTH && Date.now() - f.inicio <= JANELA_FALHAS_MS;
+}
 function autenticado(req) {
   if (!TOKEN) return !MODO_NUVEM;
 
   const authorization = String(req.headers.authorization || '');
   if (!authorization.startsWith('Bearer ')) return false;
 
-  return authorization.slice(7).trim() === TOKEN;
+  const dado = Buffer.from(authorization.slice(7).trim()), esperado = Buffer.from(TOKEN);
+  return dado.length === esperado.length && timingSafeEqual(dado, esperado);
 }
 
 function sanitizar(valor) {
@@ -342,11 +359,11 @@ function registrar(tipo, dados = {}) {
   }
 }
 
-function lerDiario(limite = 50, depois = 0) {
+function lerDiario(limite = 50, depois = 0, antes = 0) {
   try {
     const linhas = fs.readFileSync(DIARIO_ARQ, 'utf8').split('\n').filter(Boolean);
     const registros = linhas.map(linha => { try { return JSON.parse(linha); } catch { return null; } }).filter(Boolean);
-    return registros.filter(r => Number(r.seq || 0) > depois).slice(-Math.min(200, Math.max(1, limite)));
+    return registros.filter(r => Number(r.seq || 0) > depois && (!antes || Number(r.seq || 0) < antes)).slice(-Math.min(200, Math.max(1, limite)));
   } catch { return []; }
 }
 
@@ -405,29 +422,56 @@ function criarSnapshotProjeto() {
   fs.writeFileSync(path.join(pasta, 'projeto-atual.json'), JSON.stringify(snapshot), 'utf8');
   return snapshot;
 }
-function lerTrechoProjeto(caminho, linha = 1, quantidade = 100) {
-  const abs = resolverArquivoProjeto(caminho), linhas = fs.readFileSync(abs, 'utf8').split('\n');
-  const inicio = Math.max(1, Number(linha) || 1), max = Math.min(200, Math.max(1, Number(quantidade) || 100));
-  return { caminho: path.relative(RAIZ, abs).split(path.sep).join('/'), total_linhas: linhas.length, inicio, trecho: linhas.slice(inicio - 1, inicio - 1 + max).map((v,i) => `${inicio + i}: ${sanitizar(v)}`).join('\n') };
+const MAX_TELEMETRIA_BYTES = 5 * 1024 * 1024;
+function registrarTelemetriaProjeto(dados) {
+  try {
+    const arquivo = path.join(DADOS_DIR, 'telemetria-contexto-projeto.jsonl');
+    try { if (fs.statSync(arquivo).size > MAX_TELEMETRIA_BYTES) fs.renameSync(arquivo, arquivo + '.antigo'); } catch {}
+    const registro = { hora: new Date().toISOString(), ...dados, agente: sanitizar(dados.agente || 'desconhecido') };
+    fs.appendFileSync(arquivo, JSON.stringify(registro) + '\n', { encoding: 'utf8', mode: 0o600 });
+  } catch (erro) { console.error('Falha ao registrar telemetria de contexto:', sanitizar(erro.message)); }
 }
-function buscarProjeto(termo, limite = 20) {
+function bytesSnapshot(s) {
+  return s.arquivos.reduce((n, x) => n + (!x.ignorado && x.extensao !== '.pdf' ? Number(x.bytes || 0) : 0), 0);
+}
+const SNAPSHOT_TTL_MS = process.env.SNAPSHOT_TTL_MS !== undefined && process.env.SNAPSHOT_TTL_MS !== '' ? (Number(process.env.SNAPSHOT_TTL_MS) || 0) : 4000;
+let snapshotEmCache = null, snapshotEmCacheEm = 0;
+function snapshotProjeto(usarCache = false) {
+  const agora = Date.now();
+  if (usarCache && SNAPSHOT_TTL_MS > 0 && snapshotEmCache && agora - snapshotEmCacheEm < SNAPSHOT_TTL_MS) return { snap: snapshotEmCache, reaproveitado: true };
+  snapshotEmCache = criarSnapshotProjeto();
+  snapshotEmCacheEm = agora;
+  return { snap: snapshotEmCache, reaproveitado: false };
+}
+function lerTrechoProjeto(caminho, linha = 1, quantidade = 100, agente = 'desconhecido') {
+  const abs = resolverArquivoProjeto(caminho), texto = fs.readFileSync(abs, 'utf8'), linhas = texto.split('\n');
+  const inicio = Math.max(1, Number(linha) || 1), max = Math.min(200, Math.max(1, Number(quantidade) || 100));
+  const trecho = linhas.slice(inicio - 1, inicio - 1 + max).map((v, i) => `${inicio + i}: ${sanitizar(v)}`).join('\n');
+  const arquivo = path.relative(RAIZ, abs).split(path.sep).join('/');
+  registrarTelemetriaProjeto({ agente, acao: 'ler', caminho: arquivo, linha_inicio: inicio, linhas_pedidas: max, linhas_arquivo: linhas.length, linhas_devolvidas: Math.min(max, Math.max(0, linhas.length - inicio + 1)), bytes_arquivo_lido: Buffer.byteLength(texto), bytes_devolvidos: Buffer.byteLength(trecho) });
+  return { caminho: arquivo, total_linhas: linhas.length, inicio, trecho };
+}
+function buscarProjeto(termo, limite = 20, agente = 'desconhecido') {
   const q = String(termo || '').trim().toLowerCase();
   if (q.length < 2) throw new Error('Informe um termo de busca com pelo menos 2 caracteres.');
-  const snap = criarSnapshotProjeto(), achados = [], max = Math.min(30, Math.max(1, Number(limite) || 20));
+  const { snap, reaproveitado } = snapshotProjeto(true), achados = [], max = Math.min(30, Math.max(1, Number(limite) || 20));
+  let arquivos_varridos = 0, bytes_varridos = 0;
   for (const item of snap.arquivos) {
     if (achados.length >= max) break;
     if (item.ignorado) continue;
     try {
-      const linhas = fs.readFileSync(resolverArquivoProjeto(item.caminho), 'utf8').split('\n');
-      for (let i=0; i<linhas.length; i++) if (linhas[i].toLowerCase().includes(q)) {
-        achados.push({ caminho: item.caminho, linha: i+1, trecho: linhas[i].slice(0, 300) });
+      const texto = fs.readFileSync(resolverArquivoProjeto(item.caminho), 'utf8');
+      arquivos_varridos++; bytes_varridos += Buffer.byteLength(texto);
+      const linhas = texto.split('\n');
+      for (let i = 0; i < linhas.length; i++) if (linhas[i].toLowerCase().includes(q)) {
+        achados.push({ caminho: item.caminho, linha: i + 1, trecho: sanitizar(linhas[i].slice(0, 300)) });
         if (achados.length >= max) break;
       }
     } catch {}
   }
+  registrarTelemetriaProjeto({ agente, acao: 'buscar', arquivos_no_projeto: snap.arquivos.length, bytes_snapshot_lidos: reaproveitado ? 0 : bytesSnapshot(snap), arquivos_varridos, bytes_varridos, ocorrencias: achados.length, bytes_devolvidos: Buffer.byteLength(JSON.stringify(achados)), termo_caracteres: q.length });
   return { termo: q, ocorrencias: achados.length, resultados: achados };
 }
-
 function limitarSaida(texto) {
   const valor = sanitizar(texto);
   if (Buffer.byteLength(valor, 'utf8') <= MAX_OUTPUT_BYTES) return valor;
@@ -477,6 +521,14 @@ function executarStreaming(id, body, res) {
   };
 
   let recebeuFim = false;
+
+  const limiteTempo = setTimeout(() => {
+    recebeuFim = true;
+    enviar({ t: 'err', msg: 'A ferramenta excedeu o tempo máximo de execução.' });
+    if (!filho.killed) filho.kill();
+  }, Number(process.env.TOOL_STREAM_TIMEOUT_MS) || 600000);
+  limiteTempo.unref();
+  filho.on('close', () => clearTimeout(limiteTempo));
 
   filho.on('message', mensagem => {
     if (mensagem.t === 'done' || mensagem.t === 'err') recebeuFim = true;
@@ -631,12 +683,13 @@ async function acaoSynapse(argumentos) {
     const op = String(argumentos.op || 'mapa').toLowerCase();
     if (op === 'mapa' || op === 'snapshot') {
       const s = criarSnapshotProjeto();
+      registrarTelemetriaProjeto({ agente, acao: 'mapa', arquivos_no_projeto: s.total_arquivos, bytes_snapshot_lidos: bytesSnapshot(s) });
       const pastas = {};
       for (const f of s.arquivos) { const p = f.caminho.split('/')[0] || '.'; pastas[p] = (pastas[p] || 0) + 1; }
       return JSON.stringify({ snapshot: s.id, gerado_em: s.gerado_em, arquivos: s.total_arquivos, pastas: s.total_pastas, ignorados: s.ignorados, por_pasta: pastas, indice: s.arquivos.slice(0, 45).map(f => ({ caminho: f.caminho, linhas: f.linhas, bytes: f.bytes, sha256: f.sha256, ignorado: f.ignorado })), proximo: 'Use op=ler com caminho e linha para abrir trechos; op=buscar para localizar símbolos.' }, null, 2);
     }
-    if (op === 'ler') return JSON.stringify(lerTrechoProjeto(argumentos.caminho, argumentos.linha, argumentos.quantidade), null, 2);
-    if (op === 'buscar') return JSON.stringify(buscarProjeto(argumentos.consulta || argumentos.texto, argumentos.limite), null, 2);
+    if (op === 'ler') return JSON.stringify(lerTrechoProjeto(argumentos.caminho, argumentos.linha, argumentos.quantidade, agente), null, 2);
+    if (op === 'buscar') return JSON.stringify(buscarProjeto(argumentos.consulta || argumentos.texto, argumentos.limite, agente), null, 2);
     throw new Error('op inválida para projeto. Use: mapa, snapshot, ler ou buscar.');
   }
 
@@ -848,6 +901,8 @@ async function atenderMcp(req, res) {
   }
 
   if (!autenticado(req)) {
+    registrarFalhaAuth(req);
+    if (excedeuFalhasAuth(req)) return responderJson(res, { erro: 'Muitas tentativas sem autorização. Aguarde alguns minutos.' }, 429, { ...headers, 'Retry-After': '600' });
     return responderJson(
       res,
       { erro: 'Não autorizado.' },
@@ -1020,6 +1075,8 @@ const servidor = http.createServer(async (req, res) => {
           servico: 'synapse',
           modo: MODO_NUVEM ? 'nuvem' : 'local',
           ferramentas: loader.tools.size,
+          extensoes: extensoes.estado().length,
+          uptime_s: Math.round(process.uptime()),
           autenticacao: TOKEN ? 'token configurado' : 'sem token',
         },
         200,
@@ -1031,6 +1088,9 @@ const servidor = http.createServer(async (req, res) => {
       return responderJson(res, { erro: 'Não autorizado. Configure o token SYNAPSE_TOKEN no painel.' }, 401, headers);
     }
 
+    if (pathname === '/api/ext' || pathname.startsWith('/api/ext/')) {
+      if (await extensoes.tratar(req, res, { url, pathname, headers })) return;
+    }
     if (pathname === '/api/ferramentas' && req.method === 'GET') {
       return responderJson(res, loader.lista(), 200, headers);
     }
@@ -1039,7 +1099,8 @@ const servidor = http.createServer(async (req, res) => {
     if (pathname === '/api/diario' && req.method === 'GET') {
       const limite = Math.min(200, Math.max(1, Number(url.searchParams.get('limite')) || 60));
       const depois = Math.max(0, Number(url.searchParams.get('depois')) || 0);
-      return responderJson(res, { registros: lerDiario(limite, depois) }, 200, headers);
+      const antes = Math.max(0, Number(url.searchParams.get('antes')) || 0);
+      return responderJson(res, { registros: lerDiario(limite, depois, antes) }, 200, headers);
     }
     if (pathname === '/api/projeto/snapshot' && req.method === 'GET') {
       const s = criarSnapshotProjeto();
@@ -1047,7 +1108,7 @@ const servidor = http.createServer(async (req, res) => {
     }
     if (pathname === '/api/projeto/arquivo' && req.method === 'GET') {
       try {
-        const trecho = lerTrechoProjeto(url.searchParams.get('caminho'), url.searchParams.get('linha'), url.searchParams.get('quantidade'));
+        const trecho = lerTrechoProjeto(url.searchParams.get('caminho'), url.searchParams.get('linha'), url.searchParams.get('quantidade'), 'painel');
         return responderJson(res, trecho, 200, headers);
       } catch (erro) { return responderJson(res, { erro: sanitizar(erro.message) }, 400, headers); }
     }
@@ -1110,6 +1171,7 @@ const servidor = http.createServer(async (req, res) => {
 
     res.writeHead(200, {
       'Content-Type': MIME[path.extname(caminho)] || 'application/octet-stream',
+      'X-Content-Type-Options': 'nosniff',
       'Cache-Control': 'no-cache',
       ...headers,
     });
@@ -1141,9 +1203,42 @@ setInterval(() => {
   }
 }, 25000).unref();
 
+let extensoes = { iniciar: async () => {}, parar: async () => {}, tratar: async () => false, estado: () => [] };
+try {
+  const { criarExtensoes } = await import('./core/extensoes.js');
+  extensoes = criarExtensoes({
+    raiz: RAIZ,
+    contexto: { raiz: RAIZ, dadosDir: DADOS_DIR, loader, agentes, registrar, sanitizar, emitirEvento, responderJson, lerCorpo, lerDiario, autenticado, executarFerramenta, persistir: () => persistir },
+  });
+  await extensoes.iniciar();
+} catch (e) {
+  console.error('Extensões desligadas:', e.message);
+}
+
+servidor.keepAliveTimeout = 65000;
+servidor.headersTimeout = 66000;
+
+let encerrando = false;
+async function encerrar(sinal) {
+  if (encerrando) return;
+  encerrando = true;
+  console.log(`Recebido ${sinal}: encerrando com segurança...`);
+  const forcar = setTimeout(() => process.exit(0), 9000);
+  forcar.unref();
+  try { await extensoes.parar(); } catch (e) { console.error('Extensões (parar):', e.message); }
+  try { await persistirGerados(); await new Promise(r => setTimeout(r, 300)); await persistirGerados(); } catch {}
+  for (const cliente of clientes) { try { cliente.end(); } catch {} }
+  servidor.close(() => process.exit(0));
+  if (typeof servidor.closeIdleConnections === 'function') servidor.closeIdleConnections();
+}
+process.on('SIGTERM', () => { encerrar('SIGTERM'); });
+process.on('SIGINT', () => { encerrar('SIGINT'); });
+process.on('unhandledRejection', motivo => { console.error('Promessa rejeitada sem tratamento:', sanitizar(motivo?.message || motivo)); });
+process.on('uncaughtException', erro => { console.error('Exceção não tratada:', sanitizar(erro?.stack || erro?.message || erro)); });
 servidor.listen(PORTA, HOST, () => {
   console.log(`Synapse: modo=${MODO_NUVEM ? 'nuvem' : 'local'} host=${HOST} porta=${PORTA} MCP=${MCP_PATH}`);
   console.log(`Ferramentas carregadas: ${loader.tools.size}`);
   console.log(`Dados: ${DADOS_DIR} | persistência declarada=${DADOS_PERSISTENTE ? 'sim' : 'não'} | estado/diário=${persistir ? 'MongoDB' : 'arquivos locais'}`);
   console.log(`Token: ${TOKEN ? 'configurado' : 'não configurado'}`);
+  console.log(`Extensões: ${extensoes.estado().length} | telemetria de contexto: ativa`);
 });
